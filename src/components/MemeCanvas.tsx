@@ -327,7 +327,12 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
               height: meme.height,
               objectFit: "fill",
               opacity: isReady ? 1 : 0,
+              // Performance optimizations
+              backfaceVisibility: "hidden",
+              transform: "translateZ(0)",
             }}
+            decoding="async"
+            loading="lazy"
           />
         ))}
 
