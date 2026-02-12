@@ -33,6 +33,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }
 
+    // Clamp dimensions to board boundaries (1000x1000)
+    const BOARD_SIZE = 1000;
+    const clampedWidth = Math.min(width, BOARD_SIZE - x);
+    const clampedHeight = Math.min(height, BOARD_SIZE - y);
+
     // 1. Collision Detection [REMOVED] - Overlapping allowed
     // const { data: existingMemes, error: fetchError } = await supabase...
 
@@ -40,17 +45,20 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    const isGif = file.type === "image/gif";
+
     const uploadResult = await new Promise<any>((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(
           {
             folder: "papanmeme",
-            transformation: [
-              // Optimize: Resize to exact dimensions to save storage/bandwidth if needed,
-              // or just keep original quality but limit size
-              { width: width, height: height, crop: "limit" },
-              { quality: "auto", fetch_format: "auto" },
-            ],
+            resource_type: "image",
+            transformation: isGif
+              ? [{ width: clampedWidth, height: clampedHeight, crop: "limit" }]
+              : [
+                  { width: clampedWidth, height: clampedHeight, crop: "limit" },
+                  { quality: "auto", fetch_format: "auto" },
+                ],
           },
           (error, result) => {
             if (error) reject(error);
@@ -67,8 +75,8 @@ export async function POST(request: Request) {
         image_url: uploadResult.secure_url,
         x,
         y,
-        width,
-        height,
+        width: clampedWidth,
+        height: clampedHeight,
         title,
         // link: ... if we add link input
       })

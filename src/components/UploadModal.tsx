@@ -9,6 +9,13 @@ import {
   Maximize2,
   AlertTriangle,
 } from "lucide-react";
+import {
+  GRID_SIZE,
+  PRICE_PER_PIXEL,
+  OVERRIDE_PRICE_PER_PIXEL,
+  ACCEPTED_IMAGE_TYPES,
+  ACCEPTED_IMAGE_LABEL,
+} from "@/lib/constants";
 import ReactCrop, {
   Crop,
   PixelCrop,
@@ -60,13 +67,10 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
 
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(""); // auto-set from filename
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const PRICE_PER_PIXEL = 1; // Rp 1 per pixel
-  const OVERRIDE_PRICE_PER_PIXEL = 5; // Rp 5 per pixel for overlaps
 
   // Sync position
   useEffect(() => {
@@ -144,15 +148,33 @@ const UploadModal: React.FC<UploadModalProps> = ({
     setError(null);
 
     try {
-      const blob = await getCroppedImg(imgRef.current, completedCrop);
-      const file = new File([blob], "meme.jpg", { type: "image/jpeg" });
+      let fileToUpload: File;
+
+      if (imageFile?.type === "image/gif") {
+        // For GIFs, use the original file to preserve animation
+        fileToUpload = imageFile;
+      } else {
+        // For static images, use the cropped blob
+        const blob = await getCroppedImg(imgRef.current, completedCrop);
+        fileToUpload = new File([blob], "meme.jpg", { type: "image/jpeg" });
+      }
+
+      // Clamp dimensions to fit within board boundaries
+      const clampedW = Math.min(
+        Math.round(completedCrop.width),
+        GRID_SIZE - Math.round(position.x),
+      );
+      const clampedH = Math.min(
+        Math.round(completedCrop.height),
+        GRID_SIZE - Math.round(position.y),
+      );
 
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", fileToUpload);
       formData.append("x", Math.round(position.x).toString());
       formData.append("y", Math.round(position.y).toString());
-      formData.append("width", Math.round(completedCrop.width).toString());
-      formData.append("height", Math.round(completedCrop.height).toString());
+      formData.append("width", clampedW.toString());
+      formData.append("height", clampedH.toString());
       formData.append("title", title);
 
       const response = await fetch("/api/memes", {
@@ -272,31 +294,67 @@ const UploadModal: React.FC<UploadModalProps> = ({
         <div className="flex-1 bg-black relative overflow-hidden flex items-center justify-center min-h-[300px]">
           {imgSrc ? (
             <div className="p-4 w-full h-full flex items-center justify-center">
-              <ReactCrop
-                crop={crop}
-                onChange={(_, percentCrop) => setCrop(percentCrop)}
-                onComplete={(c) => setCompletedCrop(c)}
-                disabled={isUploading}
-                className={`max-h-[50vh] ${isUploading ? "pointer-events-none opacity-50" : ""}`}
-              >
-                <img
-                  ref={imgRef}
-                  alt="Crop me"
-                  src={imgSrc}
-                  onLoad={onImageLoad}
-                  style={{
-                    maxHeight: "50vh",
-                    maxWidth: "100%",
-                    objectFit: "contain",
-                  }}
-                />
-              </ReactCrop>
+              {imageFile?.type === "image/gif" ? (
+                // GIF Mode: Show original image without crop
+                <div className="relative max-h-[50vh]">
+                  <img
+                    ref={imgRef}
+                    alt="Preview"
+                    src={imgSrc}
+                    onLoad={(e) => {
+                      const { naturalWidth, naturalHeight } = e.currentTarget;
+                      // Clamp size so it fits within board boundaries
+                      const maxW = GRID_SIZE - position.x;
+                      const maxH = GRID_SIZE - position.y;
+                      const w = Math.min(naturalWidth, maxW);
+                      const h = Math.min(naturalHeight, maxH);
+                      setCompletedCrop({
+                        unit: "px",
+                        x: 0,
+                        y: 0,
+                        width: w,
+                        height: h,
+                      });
+                    }}
+                    style={{
+                      maxHeight: "50vh",
+                      maxWidth: "100%",
+                      objectFit: "contain",
+                    }}
+                  />
+                  <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-md uppercase font-bold tracking-wider">
+                    GIF • Fixed Size
+                  </div>
+                </div>
+              ) : (
+                // Standard Image Mode: Show Crop
+                <ReactCrop
+                  crop={crop}
+                  onChange={(_, percentCrop) => setCrop(percentCrop)}
+                  onComplete={(c) => setCompletedCrop(c)}
+                  disabled={isUploading}
+                  className={`max-h-[50vh] ${isUploading ? "pointer-events-none opacity-50" : ""}`}
+                >
+                  <img
+                    ref={imgRef}
+                    alt="Crop me"
+                    src={imgSrc}
+                    onLoad={onImageLoad}
+                    style={{
+                      maxHeight: "50vh",
+                      maxWidth: "100%",
+                      objectFit: "contain",
+                    }}
+                  />
+                </ReactCrop>
+              )}
 
               {/* Floating Remove Button */}
               <button
                 onClick={() => {
                   setImgSrc("");
                   setImageFile(null);
+                  setCompletedCrop(undefined);
                 }}
                 className="absolute top-2 right-2 bg-black/50 hover:bg-red-500 text-white p-1.5 rounded-full backdrop-blur-md transition z-10"
               >
@@ -304,14 +362,14 @@ const UploadModal: React.FC<UploadModalProps> = ({
               </button>
             </div>
           ) : (
-            <label className="flex flex-col items-center justify-center w-full h-full cursor-pointer hover:bg-zinc-800/50 transition gap-3 text-zinc-500 hover:text-zinc-300">
+            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-800/50 transition gap-3 text-zinc-500 hover:text-zinc-300">
               <Upload className="w-10 h-10 mb-2" />
               <span className="font-medium text-sm">
-                Ketuk untuk upload gambar
+                Ketuk untuk upload gambar ({ACCEPTED_IMAGE_LABEL})
               </span>
               <input
                 type="file"
-                accept="image/*"
+                accept={ACCEPTED_IMAGE_TYPES}
                 onChange={onSelectFile}
                 className="hidden"
               />
@@ -321,16 +379,6 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
         {/* Footer Controls */}
         <div className="p-4 bg-zinc-900 border-t border-zinc-800 space-y-4">
-          {/* Title Input */}
-          <input
-            type="text"
-            placeholder="Judul Meme..."
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={isUploading}
-            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-1 focus:ring-yellow-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-
           {/* Pricing Breakdown */}
           <div className="text-[10px] text-zinc-500 flex justify-between items-center px-1 font-mono">
             <span>Dasar: Rp {PRICE_PER_PIXEL}/px</span>
@@ -361,7 +409,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
             <button
               onClick={handleSubmit}
-              disabled={!completedCrop || isUploading || !title}
+              disabled={!completedCrop || isUploading}
               className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-2 rounded-lg shadow-lg active:scale-95 transition flex items-center justify-center gap-2"
             >
               {isUploading ? "..." : "Minting"}
