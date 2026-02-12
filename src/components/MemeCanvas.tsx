@@ -75,6 +75,7 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
   });
   const [isReady, setIsReady] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(false);
   const minScaleRef = useRef(1); // Minimum zoom-out scale (fit-to-screen)
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -115,6 +116,7 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
 
   const handleWheel = (e: any) => {
     e.evt.preventDefault();
+    if (!hasInteracted) setHasInteracted(true);
     const stage = e.target.getStage();
     const scaleBy = ZOOM_SPEED;
     const oldScale = stage.scaleX();
@@ -177,6 +179,7 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
   };
 
   const handleStageClick = (e: any) => {
+    if (!hasInteracted) setHasInteracted(true);
     const stage = e.target.getStage();
     const pointerPos = stage.getPointerPosition();
 
@@ -226,15 +229,31 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
       ref={containerRef}
       className="w-full h-screen bg-gray-50 overflow-hidden relative"
     >
-      {/* Watermark - always centered */}
-      <div className="fixed inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
+      {/* Watermark - dynamic positioning */}
+      <div
+        className={`fixed z-10 pointer-events-none transition-all duration-700 ease-in-out flex flex-col ${
+          hasInteracted
+            ? "top-6 left-6 items-start opacity-100" // Fully opaque in top-left
+            : "inset-0 items-center justify-center opacity-100" // Fully opaque in center
+        }`}
+      >
         <h1
-          className="font-bold text-gray-300/40 select-none font-mono whitespace-nowrap"
-          style={{ fontSize: "clamp(1.2rem, 6vw, 4.5rem)" }}
+          className={`font-bold select-none font-mono whitespace-nowrap transition-all duration-700 ${
+            hasInteracted ? "text-gray-400" : "text-gray-300/40"
+          }`}
+          style={{
+            fontSize: hasInteracted ? "1.5rem" : "clamp(1.2rem, 6vw, 4.5rem)",
+          }}
         >
           {APP_NAME}
         </h1>
-        <p className="font-mono text-gray-400/60 font-medium select-none tracking-widest uppercase text-xs md:text-sm text-center px-4 mt-2">
+        <p
+          className={`font-mono font-medium select-none tracking-widest uppercase transition-all duration-700 ${
+            hasInteracted
+              ? "text-[10px] text-left mt-0 ml-1 text-gray-500"
+              : "text-xs md:text-sm text-center px-4 mt-2 text-gray-400/60"
+          }`}
+        >
           {APP_TAGLINE}
         </p>
       </div>
@@ -250,7 +269,10 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
         onWheel={handleWheel}
         onClick={handleStageClick}
         onTap={handleStageClick}
-        onDragStart={() => setIsDragging(true)}
+        onDragStart={() => {
+          setIsDragging(true);
+          if (!hasInteracted) setHasInteracted(true);
+        }}
         onDragEnd={(e) => {
           const bounded = clampPosition(
             e.target.x(),
