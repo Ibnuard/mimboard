@@ -301,19 +301,6 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
           {/* Grid Lines */}
           {gridLines}
 
-          {/* Selection Indicator */}
-          {selectedCoords && (
-            <Rect
-              x={selectedCoords.x}
-              y={selectedCoords.y}
-              width={GRID_STEP}
-              height={GRID_STEP}
-              fill="rgba(251, 191, 36, 0.6)"
-              stroke="#fbbf24"
-              strokeWidth={2}
-            />
-          )}
-
           {/* All Memes — GIFs hidden when not dragging (HTML overlay takes over) */}
           {memes.map((meme) => {
             const isGif = isGifUrl(meme.image_url);
@@ -361,6 +348,24 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
               />
             );
           })}
+
+      {/* Selection Indicator Overlay — always on top */}
+      {selectedCoords && (
+        <div
+          className="pointer-events-none z-20"
+          style={{
+            position: "absolute",
+            left: stageSpec.x + selectedCoords.x * stageSpec.scale,
+            top: stageSpec.y + selectedCoords.y * stageSpec.scale,
+            width: GRID_STEP * stageSpec.scale,
+            height: GRID_STEP * stageSpec.scale,
+            backgroundColor: "rgba(251, 191, 36, 0.6)",
+            border: "2px solid #fbbf24",
+            boxSizing: "border-box",
+            opacity: isReady && !isDragging ? 1 : 0,
+          }}
+        />
+      )}
     </div>
   );
 };
