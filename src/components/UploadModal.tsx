@@ -15,6 +15,7 @@ import {
   OVERRIDE_PRICE_PER_PIXEL,
   ACCEPTED_IMAGE_TYPES,
   ACCEPTED_IMAGE_LABEL,
+  SCALE_OPTIONS,
 } from "@/lib/constants";
 import ReactCrop, {
   Crop,
@@ -69,6 +70,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
   const [title, setTitle] = useState(""); // auto-set from filename
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +85,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
       setError(null);
       setCrop(undefined);
       setCompletedCrop(undefined);
+      setScale(1);
     }
   }, [isOpen, initialPosition]);
 
@@ -160,14 +163,10 @@ const UploadModal: React.FC<UploadModalProps> = ({
       }
 
       // Clamp dimensions to fit within board boundaries
-      const clampedW = Math.min(
-        Math.round(completedCrop.width),
-        GRID_SIZE - Math.round(position.x),
-      );
-      const clampedH = Math.min(
-        Math.round(completedCrop.height),
-        GRID_SIZE - Math.round(position.y),
-      );
+      const scaledW = Math.round(completedCrop.width * scale);
+      const scaledH = Math.round(completedCrop.height * scale);
+      const clampedW = Math.min(scaledW, GRID_SIZE - Math.round(position.x));
+      const clampedH = Math.min(scaledH, GRID_SIZE - Math.round(position.y));
 
       const formData = new FormData();
       formData.append("file", fileToUpload);
@@ -201,11 +200,11 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const calculateOverlapArea = () => {
     if (!completedCrop) return 0;
 
-    // Current meme stats
+    // Current meme stats (scaled)
     const cx = position.x;
     const cy = position.y;
-    const cw = completedCrop.width;
-    const ch = completedCrop.height;
+    const cw = completedCrop.width * scale;
+    const ch = completedCrop.height * scale;
 
     if (cw <= 0 || ch <= 0) return 0;
 
@@ -242,8 +241,10 @@ const UploadModal: React.FC<UploadModalProps> = ({
     return totalOverlap;
   };
 
-  const width = completedCrop?.width || 0;
-  const height = completedCrop?.height || 0;
+  const rawWidth = completedCrop?.width || 0;
+  const rawHeight = completedCrop?.height || 0;
+  const width = Math.round(rawWidth * scale);
+  const height = Math.round(rawHeight * scale);
 
   const baseArea = width * height;
   const overlapArea = calculateOverlapArea();
@@ -376,6 +377,32 @@ const UploadModal: React.FC<UploadModalProps> = ({
             </label>
           )}
         </div>
+
+        {/* Scale Selector — only show when image is loaded */}
+        {imgSrc && (
+          <div className="px-4 py-2 border-b border-zinc-800 bg-zinc-900/50">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-zinc-500 font-mono uppercase font-bold tracking-wider">
+                Skala
+              </span>
+              <div className="flex gap-1">
+                {SCALE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => setScale(opt)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold transition ${
+                      scale === opt
+                        ? "bg-yellow-500 text-black"
+                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                    }`}
+                  >
+                    {opt}x
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer Controls */}
         <div className="p-4 bg-zinc-900 border-t border-zinc-800 space-y-4">

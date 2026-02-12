@@ -230,7 +230,7 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
       <div className="fixed inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
         <h1
           className="font-bold text-gray-300/40 select-none font-mono whitespace-nowrap"
-          style={{ fontSize: "clamp(2rem, 10vw, 10rem)" }}
+          style={{ fontSize: "clamp(1.2rem, 6vw, 4.5rem)" }}
         >
           {APP_NAME}
         </h1>
