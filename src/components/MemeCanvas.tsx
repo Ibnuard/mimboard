@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { Stage, Layer, Line, Image as KonvaImage, Rect } from "react-konva";
-import useImage from "use-image";
+import { Stage, Layer, Line, Rect } from "react-konva";
 import {
   GRID_SIZE,
   GRID_STEP,
@@ -12,48 +11,6 @@ import {
   APP_NAME,
   APP_TAGLINE,
 } from "@/lib/constants";
-
-// Check if a URL points to a GIF
-const isGifUrl = (url: string) => {
-  try {
-    const pathname = new URL(url).pathname;
-    return pathname.toLowerCase().endsWith(".gif");
-  } catch {
-    return url.toLowerCase().includes(".gif");
-  }
-};
-
-// Custom Image Component for Konva
-const MemeImage = ({
-  src,
-  x,
-  y,
-  width,
-  height,
-  title,
-  opacity = 1,
-}: {
-  src: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  title?: string;
-  opacity?: number;
-}) => {
-  const [image] = useImage(src, "anonymous");
-  return (
-    <KonvaImage
-      image={image}
-      x={x}
-      y={y}
-      width={width}
-      height={height}
-      title={title}
-      opacity={opacity}
-    />
-  );
-};
 
 interface MemeCanvasProps {
   memes: any[];
@@ -78,6 +35,14 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
   const [hasInteracted, setHasInteracted] = useState(false);
   const minScaleRef = useRef(1); // Minimum zoom-out scale (fit-to-screen)
   const containerRef = useRef<HTMLDivElement>(null);
+  const memesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Sync the HTML overlay container with Stage transform
+  const syncOverlayTransform = (x: number, y: number, scale: number) => {
+    if (memesContainerRef.current) {
+      memesContainerRef.current.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    }
+  };
 
   // Calculate the "fit-to-screen" scale
   const calcFitScale = (w: number, h: number) => {
@@ -106,6 +71,8 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
         x: x,
         y: y,
       });
+      // Initial sync
+      syncOverlayTransform(x, y, fillScale);
       setIsReady(true);
     };
 
@@ -152,6 +119,8 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
       x: bounded.x,
       y: bounded.y,
     }));
+    // Sync immediately for smooth zoom
+    syncOverlayTransform(bounded.x, bounded.y, newScale);
   };
 
   // Clamp position so at least 30% of the board is visible
@@ -273,6 +242,10 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
           setIsDragging(true);
           if (!hasInteracted) setHasInteracted(true);
         }}
+        onDragMove={(e) => {
+          // Direct DOM manipulation for zero-lag syncing
+          syncOverlayTransform(e.target.x(), e.target.y(), e.target.scaleX());
+        }}
         onDragEnd={(e) => {
           const bounded = clampPosition(
             e.target.x(),
@@ -288,9 +261,12 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
             x: bounded.x,
             y: bounded.y,
           }));
+          // Final sync to snapped state
+          syncOverlayTransform(bounded.x, bounded.y, stageSpec.scale);
           setIsDragging(false);
         }}
         dragBoundFunc={(pos) => {
+          // We can sync here too for ultra-smooth bounds, but onDragMove is usually enough
           return clampPosition(
             pos.x,
             pos.y,
@@ -322,72 +298,57 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
 
           {/* Grid Lines */}
           {gridLines}
-
-          {/* All Memes — GIFs hidden when not dragging (HTML overlay takes over) */}
-          {memes.map((meme) => {
-            const isGif = isGifUrl(meme.image_url);
-            return (
-              <MemeImage
-                key={meme.id}
-                src={meme.image_url}
-                x={meme.x}
-                y={meme.y}
-                width={meme.width}
-                height={meme.height}
-                title={meme.title}
-                opacity={isGif && !isDragging ? 0 : 1}
-              />
-            );
-          })}
         </Layer>
       </Stage>
 
-      {/* Animated GIF Overlays — only visible when not dragging */}
-      {!isDragging &&
-        memes
-          .filter((meme) => isGifUrl(meme.image_url))
-          .map((meme) => {
-            const screenX = stageSpec.x + meme.x * stageSpec.scale;
-            const screenY = stageSpec.y + meme.y * stageSpec.scale;
-            const screenW = meme.width * stageSpec.scale;
-            const screenH = meme.height * stageSpec.scale;
+      {/* Memes Container — Synced via ref for performance */}
+      <div
+        ref={memesContainerRef}
+        className="absolute top-0 left-0 origin-top-left pointer-events-none"
+        style={{
+          // Initial transform from state (will be overridden by direct manipulation)
+          transform: `translate(${stageSpec.x}px, ${stageSpec.y}px) scale(${stageSpec.scale})`,
+          width: GRID_SIZE,
+          height: GRID_SIZE,
+        }}
+      >
+        {/* All Memes (HTML) */}
+        {memes.map((meme) => (
+          <img
+            key={meme.id}
+            src={meme.image_url}
+            alt={meme.title || ""}
+            className="pointer-events-none select-none"
+            style={{
+              position: "absolute",
+              left: meme.x,
+              top: meme.y,
+              width: meme.width,
+              height: meme.height,
+              objectFit: "fill",
+              opacity: isReady ? 1 : 0,
+            }}
+          />
+        ))}
 
-            return (
-              <img
-                key={meme.id}
-                src={meme.image_url}
-                alt={meme.title || ""}
-                className="pointer-events-none"
-                style={{
-                  position: "absolute",
-                  left: screenX,
-                  top: screenY,
-                  width: screenW,
-                  height: screenH,
-                  objectFit: "fill",
-                  opacity: isReady ? 1 : 0,
-                }}
-              />
-            );
-          })}
-
-      {/* Selection Indicator Overlay — always on top */}
-      {selectedCoords && (
-        <div
-          className="pointer-events-none z-20"
-          style={{
-            position: "absolute",
-            left: stageSpec.x + selectedCoords.x * stageSpec.scale,
-            top: stageSpec.y + selectedCoords.y * stageSpec.scale,
-            width: GRID_STEP * stageSpec.scale,
-            height: GRID_STEP * stageSpec.scale,
-            backgroundColor: "rgba(251, 191, 36, 0.6)",
-            border: "2px solid #fbbf24",
-            boxSizing: "border-box",
-            opacity: isReady && !isDragging ? 1 : 0,
-          }}
-        />
-      )}
+        {/* Selection Indicator Overlay */}
+        {selectedCoords && (
+          <div
+            className="pointer-events-none z-20"
+            style={{
+              position: "absolute",
+              left: selectedCoords.x,
+              top: selectedCoords.y,
+              width: GRID_STEP,
+              height: GRID_STEP,
+              backgroundColor: "rgba(251, 191, 36, 0.6)",
+              border: "2px solid #fbbf24",
+              boxSizing: "border-box",
+              opacity: isReady ? 1 : 0,
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 };
