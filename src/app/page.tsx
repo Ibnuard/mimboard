@@ -7,6 +7,9 @@ import Onboarding from "@/components/Onboarding";
 import { supabase } from "@/lib/supabase";
 
 // Dynamically import MemeCanvas with no SSR
+import { GRID_SIZE } from "@/lib/constants";
+
+// Dynamically import MemeCanvas with no SSR
 const MemeCanvas = dynamic(() => import("@/components/MemeCanvas"), {
   ssr: false,
   loading: () => (
@@ -23,6 +26,7 @@ export default function Home() {
     x: number;
     y: number;
   } | null>(null);
+  const [percentRemaining, setPercentRemaining] = useState(100);
 
   const fetchMemes = async () => {
     const { data, error } = await supabase.from("memes").select("*");
@@ -33,6 +37,44 @@ export default function Home() {
   useEffect(() => {
     fetchMemes();
   }, []);
+
+  // Calculate remaining pixels
+  useEffect(() => {
+    if (memes.length === 0) {
+      setPercentRemaining(100);
+      return;
+    }
+
+    // Debounce slightly to avoid blocking main thread immediately on load
+    const timer = setTimeout(() => {
+      const totalPixels = GRID_SIZE * GRID_SIZE;
+      const grid = new Uint8Array(totalPixels);
+      let occupiedCount = 0;
+
+      for (const meme of memes) {
+        const startX = Math.max(0, Math.floor(meme.x));
+        const startY = Math.max(0, Math.floor(meme.y));
+        const endX = Math.min(GRID_SIZE, Math.floor(meme.x + meme.width));
+        const endY = Math.min(GRID_SIZE, Math.floor(meme.y + meme.height));
+
+        for (let y = startY; y < endY; y++) {
+          const rowOffset = y * GRID_SIZE;
+          for (let x = startX; x < endX; x++) {
+            const idx = rowOffset + x;
+            if (grid[idx] === 0) {
+              grid[idx] = 1;
+              occupiedCount++;
+            }
+          }
+        }
+      }
+
+      const remaining = ((totalPixels - occupiedCount) / totalPixels) * 100;
+      setPercentRemaining(remaining);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [memes]);
 
   const handleUploadSuccess = (newMeme: any) => {
     setMemes((prev) => [...prev, newMeme]);
@@ -64,7 +106,10 @@ export default function Home() {
 
       {/* Upload Button - fixed at bottom center */}
       {selectedCoords && (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-20 animate-in fade-in zoom-in slide-in-from-bottom-10 duration-300">
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-20 animate-in fade-in zoom-in slide-in-from-bottom-10 duration-300 flex flex-col items-center gap-2">
+          <span className="text-gray-400 font-mono text-[10px] md:text-xs font-bold tracking-widest uppercase animate-pulse drop-shadow-sm">
+            🔥 {percentRemaining.toFixed(4)}% AREA TERSISA
+          </span>
           <button
             onClick={() => setIsModalOpen(true)}
             className="bg-yellow-500 hover:bg-yellow-600 text-black font-black py-3 px-8 md:py-4 md:px-10 rounded-full transition-all shadow-[0_0_50px_rgba(251,191,36,0.3)] active:scale-95 text-sm md:text-xl uppercase tracking-widest flex items-center gap-3 border-4 border-black whitespace-nowrap"
