@@ -24,6 +24,8 @@ import ReactCrop, {
   makeAspectCrop,
 } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
+// @ts-ignore
+import * as nsfwjs from "nsfwjs";
 
 // Helper function to center the crop initially
 function centerAspectCrop(
@@ -72,6 +74,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Sync position
@@ -104,11 +107,43 @@ const UploadModal: React.FC<UploadModalProps> = ({
     }
   };
 
-  const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const { width, height } = e.currentTarget;
+  const onImageLoad = async (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    const { width, height } = img;
     // Default to a 100x100 crop or centered full aspect
     // For freeform, just center a reasonable box
     setCrop(centerAspectCrop(width, height, 1));
+
+    // NSFW Scanning
+    setIsScanning(true);
+    setError(null);
+    try {
+      const model = await nsfwjs.load();
+      const predictions = await model.classify(img);
+      console.log("NSFW Predictions:", predictions);
+
+      const unsafe = predictions.find(
+        (p: any) =>
+          (p.className === "Porn" || p.className === "Hentai") &&
+          p.probability > 0.6,
+      );
+
+      if (unsafe) {
+        setError(
+          `Gambar mengandung konten sensitif (${unsafe.className}). Upload dibatalkan.`,
+        );
+        setImgSrc("");
+        setImageFile(null);
+        setCrop(undefined);
+        setCompletedCrop(undefined);
+        setScale(1);
+      }
+    } catch (err) {
+      console.error("NSFW Scan Error:", err);
+      // Optional: block if scan fails, or warn
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   // Helper to generate blob from canvas
@@ -293,6 +328,15 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
         {/* Content Area */}
         <div className="flex-1 bg-black relative overflow-hidden flex items-center justify-center min-h-[300px]">
+          {isScanning && (
+            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50 animate-in fade-in duration-200">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-yellow-500 mb-3"></div>
+              <p className="text-yellow-500 font-mono text-xs animate-pulse tracking-widest font-bold">
+                SCANNING NSFW...
+              </p>
+            </div>
+          )}
+
           {imgSrc ? (
             <div className="p-4 w-full h-full flex items-center justify-center">
               {imageFile?.type === "image/gif" ? (
@@ -331,8 +375,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
                 // Standard Image Mode: Show Crop
                 <ReactCrop
                   crop={crop}
-                  onChange={(_, percentCrop) => setCrop(percentCrop)}
-                  onComplete={(c) => setCompletedCrop(c)}
+                  onChange={(_, percentCrop: Crop) => setCrop(percentCrop)}
+                  onComplete={(c: PixelCrop) => setCompletedCrop(c)}
                   disabled={isUploading}
                   className={`max-h-[50vh] ${isUploading ? "pointer-events-none opacity-50" : ""}`}
                 >
@@ -436,14 +480,32 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
             <button
               onClick={handleSubmit}
-              disabled={!completedCrop || isUploading}
-              className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-2 rounded-lg shadow-lg active:scale-95 transition flex items-center justify-center gap-2"
+              disabled={!completedCrop || isUploading || isScanning}
+              className={`flex-1 font-bold py-2 rounded-lg shadow-lg active:scale-95 transition flex items-center justify-center gap-2 ${
+                !completedCrop || isUploading || isScanning
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  : "bg-yellow-500 hover:bg-yellow-400 text-black"
+              }`}
             >
-              {isUploading ? "..." : "Minting"}
+              {isUploading ? (
+                "Loading..."
+              ) : isScanning ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                  SCANNING...
+                </>
+              ) : (
+                "Minting"
+              )}
             </button>
           </div>
 
-          {error && <p className="text-center text-xs text-red-500">{error}</p>}
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-500">{error}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
