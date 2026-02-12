@@ -1,0 +1,378 @@
+"use client";
+
+import React, { useState, useEffect, useRef, ChangeEvent } from "react";
+import {
+  X,
+  Upload,
+  Check,
+  Image as ImageIcon,
+  Maximize2,
+  AlertTriangle,
+} from "lucide-react";
+import ReactCrop, {
+  Crop,
+  PixelCrop,
+  centerCrop,
+  makeAspectCrop,
+} from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
+
+// Helper function to center the crop initially
+function centerAspectCrop(
+  mediaWidth: number,
+  mediaHeight: number,
+  aspect: number,
+) {
+  return centerCrop(
+    makeAspectCrop(
+      {
+        unit: "%",
+        width: 90,
+      },
+      aspect,
+      mediaWidth,
+      mediaHeight,
+    ),
+    mediaWidth,
+    mediaHeight,
+  );
+}
+
+interface UploadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onUpload: (memeData: any) => void;
+  initialPosition?: { x: number; y: number };
+  existingMemes?: any[];
+}
+
+const UploadModal: React.FC<UploadModalProps> = ({
+  isOpen,
+  onClose,
+  onUpload,
+  initialPosition,
+  existingMemes = [],
+}) => {
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imgSrc, setImgSrc] = useState("");
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const [crop, setCrop] = useState<Crop>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
+
+  const [title, setTitle] = useState("");
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const PRICE_PER_PIXEL = 1; // Rp 1 per pixel
+  const OVERRIDE_PRICE_PER_PIXEL = 5; // Rp 5 per pixel for overlaps
+
+  // Sync position
+  useEffect(() => {
+    if (isOpen && initialPosition) {
+      setPosition(initialPosition);
+      // Reset logic
+      setImageFile(null);
+      setImgSrc("");
+      setTitle("");
+      setError(null);
+      setCrop(undefined);
+      setCompletedCrop(undefined);
+    }
+  }, [isOpen, initialPosition]);
+
+  const onSelectFile = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setCrop(undefined); // Makes crop preview update between images
+      const file = e.target.files[0];
+      setImageFile(file);
+      setTitle(file.name.split(".")[0]);
+
+      const reader = new FileReader();
+      reader.addEventListener("load", () =>
+        setImgSrc(reader.result?.toString() || ""),
+      );
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { width, height } = e.currentTarget;
+    // Default to a 100x100 crop or centered full aspect
+    // For freeform, just center a reasonable box
+    setCrop(centerAspectCrop(width, height, 1));
+  };
+
+  // Helper to generate blob from canvas
+  const getCroppedImg = async (
+    image: HTMLImageElement,
+    crop: PixelCrop,
+  ): Promise<Blob> => {
+    const canvas = document.createElement("canvas");
+    const scaleX = image.naturalWidth / image.width;
+    const scaleY = image.naturalHeight / image.height;
+
+    canvas.width = crop.width;
+    canvas.height = crop.height;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("No 2d context");
+
+    ctx.drawImage(
+      image,
+      crop.x * scaleX,
+      crop.y * scaleY,
+      crop.width * scaleX,
+      crop.height * scaleY,
+      0,
+      0,
+      crop.width,
+      crop.height,
+    );
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+      }, "image/jpeg");
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!completedCrop || !imgRef.current) return;
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const blob = await getCroppedImg(imgRef.current, completedCrop);
+      const file = new File([blob], "meme.jpg", { type: "image/jpeg" });
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("x", Math.round(position.x).toString());
+      formData.append("y", Math.round(position.y).toString());
+      formData.append("width", Math.round(completedCrop.width).toString());
+      formData.append("height", Math.round(completedCrop.height).toString());
+      formData.append("title", title);
+
+      const response = await fetch("/api/memes", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const newMeme = await response.json();
+      onUpload(newMeme);
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      setError("Upload failed. Try again.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // --- Overlap Calculation Logic ---
+  const calculateOverlapArea = () => {
+    if (!completedCrop) return 0;
+
+    // Current meme stats
+    const cx = position.x;
+    const cy = position.y;
+    const cw = completedCrop.width;
+    const ch = completedCrop.height;
+
+    if (cw <= 0 || ch <= 0) return 0;
+
+    let totalOverlap = 0;
+
+    // Simple brute-force overlap check against all existing memes
+    // Note: This approximates total overlap area.
+    // If multiple regular memes overlap each other and we overlap them all,
+    // we might double count pixels if we just sum them up.
+    // But for a pricing mechanic, summing up "violation areas" is a fair implementation of "per override".
+
+    existingMemes.forEach((meme) => {
+      const mx = meme.x;
+      const my = meme.y;
+      const mw = meme.width;
+      const mh = meme.height;
+
+      // Calculate intersection rectangle
+      const x_overlap = Math.max(
+        0,
+        Math.min(cx + cw, mx + mw) - Math.max(cx, mx),
+      );
+      const y_overlap = Math.max(
+        0,
+        Math.min(cy + ch, my + mh) - Math.max(cy, my),
+      );
+
+      const area = x_overlap * y_overlap;
+      if (area > 0) {
+        totalOverlap += area;
+      }
+    });
+
+    return totalOverlap;
+  };
+
+  const width = completedCrop?.width || 0;
+  const height = completedCrop?.height || 0;
+
+  const baseArea = width * height;
+  const overlapArea = calculateOverlapArea();
+
+  const baseCost = baseArea * PRICE_PER_PIXEL;
+  const overrideCost = overlapArea * OVERRIDE_PRICE_PER_PIXEL;
+  const totalCost = baseCost + overrideCost;
+
+  if (!isOpen) return null;
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      {/* Compact Container */}
+      <div className="bg-zinc-900 border border-zinc-700 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
+          <h3 className="text-white font-bold font-mono text-sm uppercase tracking-wider flex items-center gap-2">
+            <Maximize2 className="w-4 h-4 text-yellow-500" />
+            Meme Baru
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-zinc-500 hover:text-white transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Info Bar */}
+        <div className="bg-yellow-500/10 border-b border-zinc-800 px-4 py-2 flex justify-between items-center text-xs font-mono">
+          <span className="text-yellow-500">
+            Posisi: {Math.round(position.x)}, {Math.round(position.y)}
+          </span>
+          <span className="text-zinc-400">
+            {Math.round(width)} x {Math.round(height)} px
+          </span>
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 bg-black relative overflow-hidden flex items-center justify-center min-h-[300px]">
+          {imgSrc ? (
+            <div className="p-4 w-full h-full flex items-center justify-center">
+              <ReactCrop
+                crop={crop}
+                onChange={(_, percentCrop) => setCrop(percentCrop)}
+                onComplete={(c) => setCompletedCrop(c)}
+                disabled={isUploading}
+                className={`max-h-[50vh] ${isUploading ? "pointer-events-none opacity-50" : ""}`}
+              >
+                <img
+                  ref={imgRef}
+                  alt="Crop me"
+                  src={imgSrc}
+                  onLoad={onImageLoad}
+                  style={{
+                    maxHeight: "50vh",
+                    maxWidth: "100%",
+                    objectFit: "contain",
+                  }}
+                />
+              </ReactCrop>
+
+              {/* Floating Remove Button */}
+              <button
+                onClick={() => {
+                  setImgSrc("");
+                  setImageFile(null);
+                }}
+                className="absolute top-2 right-2 bg-black/50 hover:bg-red-500 text-white p-1.5 rounded-full backdrop-blur-md transition z-10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center w-full h-full cursor-pointer hover:bg-zinc-800/50 transition gap-3 text-zinc-500 hover:text-zinc-300">
+              <Upload className="w-10 h-10 mb-2" />
+              <span className="font-medium text-sm">
+                Ketuk untuk upload gambar
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onSelectFile}
+                className="hidden"
+              />
+            </label>
+          )}
+        </div>
+
+        {/* Footer Controls */}
+        <div className="p-4 bg-zinc-900 border-t border-zinc-800 space-y-4">
+          {/* Title Input */}
+          <input
+            type="text"
+            placeholder="Judul Meme..."
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            disabled={isUploading}
+            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-1 focus:ring-yellow-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+
+          {/* Pricing Breakdown */}
+          <div className="text-[10px] text-zinc-500 flex justify-between items-center px-1 font-mono">
+            <span>Dasar: Rp {PRICE_PER_PIXEL}/px</span>
+            {overlapArea > 0 && (
+              <span className="text-orange-500">
+                Timpa: +Rp {OVERRIDE_PRICE_PER_PIXEL}/px
+              </span>
+            )}
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex items-center gap-3">
+            <div
+              className={`flex-1 ${overlapArea > 0 ? "bg-orange-950/30 border-orange-500/50" : "bg-zinc-950 border-zinc-800"} rounded-lg border px-3 py-2 flex flex-col justify-center`}
+            >
+              <span className="text-xs text-zinc-500 uppercase font-bold flex items-center gap-1">
+                Total Biaya
+                {overlapArea > 0 && (
+                  <AlertTriangle className="w-3 h-3 text-orange-500" />
+                )}
+              </span>
+              <span
+                className={`text-lg font-bold ${overlapArea > 0 ? "text-orange-500" : "text-green-500"} font-mono leading-none mt-1`}
+              >
+                {formatCurrency(totalCost)}
+              </span>
+            </div>
+
+            <button
+              onClick={handleSubmit}
+              disabled={!completedCrop || isUploading || !title}
+              className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-2 rounded-lg shadow-lg active:scale-95 transition flex items-center justify-center gap-2"
+            >
+              {isUploading ? "..." : "Minting"}
+            </button>
+          </div>
+
+          {error && <p className="text-center text-xs text-red-500">{error}</p>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default UploadModal;
