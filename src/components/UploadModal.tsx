@@ -88,6 +88,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [isPaid, setIsPaid] = useState(false);
   const [timeLeft, setTimeLeft] = useState<string>("");
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -223,8 +224,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
         console.log("Poll result:", data);
 
         if (data.payment_status === "PAID") {
-          console.log("Payment confirmed! Reloading...");
-          window.location.reload();
+          setIsPaid(true);
+          setTimeout(() => window.location.reload(), 3000);
         }
       } catch (e) {
         console.error("Poll error:", e);
@@ -397,7 +398,19 @@ const UploadModal: React.FC<UploadModalProps> = ({
         </div>
 
         {/* Payment View Override */}
-        {paymentData ? (
+        {isPaid ? (
+          <div className="flex-1 bg-green-500 p-6 flex flex-col items-center justify-center text-center gap-4 animate-in zoom-in duration-300">
+            <div className="bg-white p-4 rounded-full shadow-xl animate-bounce">
+              <span className="text-4xl">🎉</span>
+            </div>
+            <h1 className="text-white text-3xl font-black italic uppercase tracking-tighter">
+              PAYMENT SUCCESS!
+            </h1>
+            <p className="text-green-100 font-mono text-xs animate-pulse">
+              Memuat ulang halaman...
+            </p>
+          </div>
+        ) : paymentData ? (
           <div className="flex-1 bg-zinc-950 p-6 flex flex-col items-center justify-center text-center gap-4 animate-in fade-in zoom-in duration-300">
             <div className="bg-white p-3 rounded-lg shadow-2xl">
               <QRCodeSVG
@@ -442,7 +455,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
                   );
                   const data = await res.json();
                   if (data.payment_status === "PAID") {
-                    window.location.reload();
+                    setIsPaid(true);
+                    setTimeout(() => window.location.reload(), 3000);
                   } else {
                     setError(
                       "Pembayaran belum masuk. Mohon tunggu notifikasi sukses...",
