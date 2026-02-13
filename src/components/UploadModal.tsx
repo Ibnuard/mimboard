@@ -87,6 +87,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const [scale, setScale] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -389,7 +390,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
             <button
               onClick={async () => {
-                if (!paymentData) return;
+                if (!paymentData || isCheckingStatus) return;
+                setIsCheckingStatus(true);
                 try {
                   const res = await fetch(
                     `/api/memes/check-status?order_id=${paymentData.order_id}`,
@@ -405,11 +407,25 @@ const UploadModal: React.FC<UploadModalProps> = ({
                   }
                 } catch (e) {
                   setError("Gagal mengecek status.");
+                } finally {
+                  setIsCheckingStatus(false);
                 }
               }}
-              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-lg font-bold transition mt-2"
+              disabled={isCheckingStatus}
+              className={`w-full py-3 rounded-lg font-bold transition mt-2 flex items-center justify-center gap-2 ${
+                isCheckingStatus
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  : "bg-zinc-800 hover:bg-zinc-700 text-white"
+              }`}
             >
-              Cek Status Pembayaran
+              {isCheckingStatus ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                  Mengecek...
+                </>
+              ) : (
+                "Cek Status Pembayaran"
+              )}
             </button>
           </div>
         ) : (

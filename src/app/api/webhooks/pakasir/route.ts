@@ -54,13 +54,39 @@ export async function POST(request: Request) {
 
     // 4. Update Status
     if (meme.payment_status !== "PAID") {
-      const { error: updateError } = await supabase
+      console.log(
+        "Attempting update with Key type:",
+        process.env.SUPABASE_SERVICE_ROLE_KEY ? "SERVICE_ROLE" : "ANON",
+      );
+
+      const {
+        data: updatedData,
+        error: updateError,
+        count,
+      } = await supabase
         .from("memes")
         .update({ payment_status: "PAID" })
-        .eq("order_id", order_id);
+        .eq("order_id", order_id)
+        .select();
+
+      console.log(`Update result for ${order_id}:`, {
+        updatedData,
+        updateError,
+        count,
+      });
 
       if (updateError) {
         throw updateError;
+      }
+
+      if (!updatedData || updatedData.length === 0) {
+        console.error(
+          "Update returned no data. Possible RLS issue or ID mismatch.",
+        );
+        // We return 200 to Pakasir to stop retries, but log error.
+        // Or return 400? If we return 500, Pakasir retries.
+        // Better return 200 IF it's an RLS issue we can't fix now,
+        // but for debugging we want to see it in logs.
       }
     }
 
