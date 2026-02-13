@@ -26,6 +26,18 @@ import ReactCrop, {
 import "react-image-crop/dist/ReactCrop.css";
 // @ts-ignore
 import * as nsfwjs from "nsfwjs";
+import { QRCodeSVG } from "qrcode.react";
+
+interface PaymentData {
+  project: string;
+  order_id: string;
+  amount: number;
+  fee: number;
+  total_payment: number;
+  payment_method: string;
+  payment_number: string;
+  expired_at: string;
+}
 
 // Helper function to center the crop initially
 function centerAspectCrop(
@@ -75,6 +87,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const [scale, setScale] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Sync position
@@ -220,8 +233,15 @@ const UploadModal: React.FC<UploadModalProps> = ({
         throw new Error("Upload failed");
       }
 
-      const newMeme = await response.json();
-      onUpload(newMeme);
+      const result = await response.json();
+
+      if (result.payment) {
+        setPaymentData(result.payment);
+        // Don't close modal, show payment UI
+        return;
+      }
+
+      onUpload(result.meme);
       onClose();
     } catch (err: any) {
       console.error(err);
@@ -284,9 +304,14 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const baseArea = width * height;
   const overlapArea = calculateOverlapArea();
 
-  const baseCost = baseArea * PRICE_PER_PIXEL;
-  const overrideCost = overlapArea * OVERRIDE_PRICE_PER_PIXEL;
-  const totalCost = baseCost + overrideCost;
+  const calculateRawCost = () => {
+    const b = baseArea * PRICE_PER_PIXEL;
+    const o = overlapArea * OVERRIDE_PRICE_PER_PIXEL;
+    return b + o;
+  };
+
+  const rawTotalCost = calculateRawCost();
+  const totalCost = Math.max(500, Math.ceil(rawTotalCost));
 
   if (!isOpen) return null;
 
@@ -326,187 +351,258 @@ const UploadModal: React.FC<UploadModalProps> = ({
           </span>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 bg-black relative overflow-hidden flex items-center justify-center min-h-[300px]">
-          {isScanning && (
-            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50 animate-in fade-in duration-200">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-yellow-500 mb-3"></div>
-              <p className="text-yellow-500 font-mono text-xs animate-pulse tracking-widest font-bold">
-                SCANNING NSFW...
+        {/* Payment View Override */}
+        {paymentData ? (
+          <div className="flex-1 bg-zinc-950 p-6 flex flex-col items-center justify-center text-center gap-4 animate-in fade-in zoom-in duration-300">
+            <div className="bg-white p-3 rounded-lg shadow-2xl">
+              <QRCodeSVG
+                value={paymentData.payment_number}
+                size={200}
+                level="M"
+                includeMargin={true}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <h4 className="text-white font-bold text-lg">Scan QRIS</h4>
+              <p className="text-zinc-400 text-xs font-mono">
+                Order ID: {paymentData.order_id}
               </p>
             </div>
-          )}
 
-          {imgSrc ? (
-            <div className="p-4 w-full h-full flex items-center justify-center">
-              {imageFile?.type === "image/gif" ? (
-                // GIF Mode: Show original image without crop
-                <div className="relative max-h-[50vh]">
-                  <img
-                    ref={imgRef}
-                    alt="Preview"
-                    src={imgSrc}
-                    onLoad={(e) => {
-                      const { naturalWidth, naturalHeight } = e.currentTarget;
-                      // Clamp size so it fits within board boundaries
-                      const maxW = GRID_SIZE - position.x;
-                      const maxH = GRID_SIZE - position.y;
-                      const w = Math.min(naturalWidth, maxW);
-                      const h = Math.min(naturalHeight, maxH);
-                      setCompletedCrop({
-                        unit: "px",
-                        x: 0,
-                        y: 0,
-                        width: w,
-                        height: h,
-                      });
-                    }}
-                    style={{
-                      maxHeight: "50vh",
-                      maxWidth: "100%",
-                      objectFit: "contain",
-                    }}
-                  />
-                  <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-md uppercase font-bold tracking-wider">
-                    GIF • Fixed Size
-                  </div>
-                </div>
-              ) : (
-                // Standard Image Mode: Show Crop
-                <ReactCrop
-                  crop={crop}
-                  onChange={(_, percentCrop: Crop) => setCrop(percentCrop)}
-                  onComplete={(c: PixelCrop) => setCompletedCrop(c)}
-                  disabled={isUploading}
-                  className={`max-h-[50vh] ${isUploading ? "pointer-events-none opacity-50" : ""}`}
-                >
-                  <img
-                    ref={imgRef}
-                    alt="Crop me"
-                    src={imgSrc}
-                    onLoad={onImageLoad}
-                    style={{
-                      maxHeight: "50vh",
-                      maxWidth: "100%",
-                      objectFit: "contain",
-                    }}
-                  />
-                </ReactCrop>
-              )}
-
-              {/* Floating Remove Button */}
-              <button
-                onClick={() => {
-                  setImgSrc("");
-                  setImageFile(null);
-                  setCompletedCrop(undefined);
-                }}
-                className="absolute top-2 right-2 bg-black/50 hover:bg-red-500 text-white p-1.5 rounded-full backdrop-blur-md transition z-10"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-800/50 transition gap-3 text-zinc-500 hover:text-zinc-300">
-              <Upload className="w-10 h-10 mb-2" />
-              <span className="font-medium text-sm">
-                Ketuk untuk upload gambar ({ACCEPTED_IMAGE_LABEL})
-              </span>
-              <input
-                type="file"
-                accept={ACCEPTED_IMAGE_TYPES}
-                onChange={onSelectFile}
-                className="hidden"
-              />
-            </label>
-          )}
-        </div>
-
-        {/* Scale Selector — only show when image is loaded */}
-        {imgSrc && (
-          <div className="px-4 py-2 border-b border-zinc-800 bg-zinc-900/50">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-zinc-500 font-mono uppercase font-bold tracking-wider">
-                Skala
-              </span>
-              <div className="flex gap-1">
-                {SCALE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => setScale(opt)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold transition ${
-                      scale === opt
-                        ? "bg-yellow-500 text-black"
-                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
-                    }`}
-                  >
-                    {opt}x
-                  </button>
-                ))}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 w-full">
+              <div className="flex justify-between items-center text-sm mb-1">
+                <span className="text-zinc-500">Total Bayar</span>
+                <span className="text-yellow-500 font-bold font-mono text-lg">
+                  {formatCurrency(paymentData.amount)}
+                </span>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Footer Controls */}
-        <div className="p-4 bg-zinc-900 border-t border-zinc-800 space-y-4">
-          {/* Pricing Breakdown */}
-          <div className="text-[10px] text-zinc-500 flex justify-between items-center px-1 font-mono">
-            <span>Dasar: Rp {PRICE_PER_PIXEL}/px</span>
-            {overlapArea > 0 && (
-              <span className="text-orange-500">
-                Timpa: +Rp {OVERRIDE_PRICE_PER_PIXEL}/px
-              </span>
-            )}
-          </div>
-
-          {/* Action Bar */}
-          <div className="flex items-center gap-3">
-            <div
-              className={`flex-1 ${overlapArea > 0 ? "bg-orange-950/30 border-orange-500/50" : "bg-zinc-950 border-zinc-800"} rounded-lg border px-3 py-2 flex flex-col justify-center`}
-            >
-              <span className="text-xs text-zinc-500 uppercase font-bold flex items-center gap-1">
-                Total Biaya
-                {overlapArea > 0 && (
-                  <AlertTriangle className="w-3 h-3 text-orange-500" />
-                )}
-              </span>
-              <span
-                className={`text-lg font-bold ${overlapArea > 0 ? "text-orange-500" : "text-green-500"} font-mono leading-none mt-1`}
-              >
-                {formatCurrency(totalCost)}
-              </span>
+              <div className="text-[10px] text-zinc-600 font-mono flex justify-between">
+                <span>
+                  Exp: {new Date(paymentData.expired_at).toLocaleTimeString()}
+                </span>
+                <span className="uppercase text-orange-500 font-bold animate-pulse">
+                  Menunggu Pembayaran...
+                </span>
+              </div>
             </div>
 
             <button
-              onClick={handleSubmit}
-              disabled={!completedCrop || isUploading || isScanning}
-              className={`flex-1 font-bold py-2 rounded-lg shadow-lg active:scale-95 transition flex items-center justify-center gap-2 ${
-                !completedCrop || isUploading || isScanning
-                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                  : "bg-yellow-500 hover:bg-yellow-400 text-black"
-              }`}
+              onClick={async () => {
+                if (!paymentData) return;
+                try {
+                  const res = await fetch(
+                    `/api/memes/check-status?order_id=${paymentData.order_id}`,
+                  );
+                  const data = await res.json();
+                  if (data.payment_status === "PAID") {
+                    window.location.reload();
+                  } else {
+                    setError(
+                      "Pembayaran belum masuk. Mohon tunggu notifikasi sukses...",
+                    );
+                    setTimeout(() => setError(null), 3000);
+                  }
+                } catch (e) {
+                  setError("Gagal mengecek status.");
+                }
+              }}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-3 rounded-lg font-bold transition mt-2"
             >
-              {isUploading ? (
-                "Loading..."
-              ) : isScanning ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                  SCANNING...
-                </>
-              ) : (
-                "Minting"
-              )}
+              Cek Status Pembayaran
             </button>
           </div>
+        ) : (
+          <>
+            {/* Content Area */}
+            <div className="flex-1 bg-black relative overflow-hidden flex items-center justify-center min-h-[300px]">
+              {isScanning && (
+                <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50 animate-in fade-in duration-200">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-yellow-500 mb-3"></div>
+                  <p className="text-yellow-500 font-mono text-xs animate-pulse tracking-widest font-bold">
+                    SCANNING NSFW...
+                  </p>
+                </div>
+              )}
 
-          {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-500">{error}</p>
+              {imgSrc ? (
+                <div className="p-4 w-full h-full flex items-center justify-center">
+                  {imageFile?.type === "image/gif" ? (
+                    // GIF Mode: Show original image without crop
+                    <div className="relative max-h-[50vh]">
+                      <img
+                        ref={imgRef}
+                        alt="Preview"
+                        src={imgSrc}
+                        onLoad={(e) => {
+                          const { naturalWidth, naturalHeight } =
+                            e.currentTarget;
+                          // Clamp size so it fits within board boundaries
+                          const maxW = GRID_SIZE - position.x;
+                          const maxH = GRID_SIZE - position.y;
+                          const w = Math.min(naturalWidth, maxW);
+                          const h = Math.min(naturalHeight, maxH);
+                          setCompletedCrop({
+                            unit: "px",
+                            x: 0,
+                            y: 0,
+                            width: w,
+                            height: h,
+                          });
+                        }}
+                        style={{
+                          maxHeight: "50vh",
+                          maxWidth: "100%",
+                          objectFit: "contain",
+                        }}
+                      />
+                      <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-md uppercase font-bold tracking-wider">
+                        GIF • Fixed Size
+                      </div>
+                    </div>
+                  ) : (
+                    // Standard Image Mode: Show Crop
+                    <ReactCrop
+                      crop={crop}
+                      onChange={(_, percentCrop: Crop) => setCrop(percentCrop)}
+                      onComplete={(c: PixelCrop) => setCompletedCrop(c)}
+                      disabled={isUploading}
+                      className={`max-h-[50vh] ${isUploading ? "pointer-events-none opacity-50" : ""}`}
+                    >
+                      <img
+                        ref={imgRef}
+                        alt="Crop me"
+                        src={imgSrc}
+                        onLoad={onImageLoad}
+                        style={{
+                          maxHeight: "50vh",
+                          maxWidth: "100%",
+                          objectFit: "contain",
+                        }}
+                      />
+                    </ReactCrop>
+                  )}
+
+                  {/* Floating Remove Button */}
+                  <button
+                    onClick={() => {
+                      setImgSrc("");
+                      setImageFile(null);
+                      setCompletedCrop(undefined);
+                    }}
+                    className="absolute top-2 right-2 bg-black/50 hover:bg-red-500 text-white p-1.5 rounded-full backdrop-blur-md transition z-10"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-800/50 transition gap-3 text-zinc-500 hover:text-zinc-300">
+                  <Upload className="w-10 h-10 mb-2" />
+                  <span className="font-medium text-sm">
+                    Ketuk untuk upload gambar ({ACCEPTED_IMAGE_LABEL})
+                  </span>
+                  <input
+                    type="file"
+                    accept={ACCEPTED_IMAGE_TYPES}
+                    onChange={onSelectFile}
+                    className="hidden"
+                  />
+                </label>
+              )}
             </div>
-          )}
-        </div>
+
+            {/* Scale Selector — only show when image is loaded */}
+            {imgSrc && (
+              <div className="px-4 py-2 border-b border-zinc-800 bg-zinc-900/50">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-zinc-500 font-mono uppercase font-bold tracking-wider">
+                    Skala
+                  </span>
+                  <div className="flex gap-1">
+                    {SCALE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt}
+                        onClick={() => setScale(opt)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold transition ${
+                          scale === opt
+                            ? "bg-yellow-500 text-black"
+                            : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                        }`}
+                      >
+                        {opt}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer Controls */}
+            <div className="p-4 bg-zinc-900 border-t border-zinc-800 space-y-4">
+              {/* Pricing Breakdown */}
+              <div className="text-[10px] text-zinc-500 flex justify-between items-center px-1 font-mono">
+                <span>Dasar: Rp {PRICE_PER_PIXEL}/px</span>
+                {overlapArea > 0 && (
+                  <span className="text-orange-500">
+                    Timpa: +Rp {OVERRIDE_PRICE_PER_PIXEL}/px
+                  </span>
+                )}
+              </div>
+
+              {/* Action Bar */}
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex-1 ${overlapArea > 0 ? "bg-orange-950/30 border-orange-500/50" : "bg-zinc-950 border-zinc-800"} rounded-lg border px-3 py-2 flex flex-col justify-center`}
+                >
+                  <span className="text-xs text-zinc-500 uppercase font-bold flex items-center gap-1">
+                    Total Biaya
+                    {overlapArea > 0 && (
+                      <AlertTriangle className="w-3 h-3 text-orange-500" />
+                    )}
+                  </span>
+                  <span
+                    className={`text-lg font-bold ${overlapArea > 0 ? "text-orange-500" : "text-green-500"} font-mono leading-none mt-1`}
+                  >
+                    {formatCurrency(totalCost)}
+                  </span>
+                  {totalCost === 500 && rawTotalCost < 500 && (
+                    <span className="text-[10px] text-zinc-500 font-normal italic block text-right w-full">
+                      *Min. Rp 500
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleSubmit}
+                  disabled={!completedCrop || isUploading || isScanning}
+                  className={`flex-1 font-bold py-2 rounded-lg shadow-lg active:scale-95 transition flex items-center justify-center gap-2 ${
+                    !completedCrop || isUploading || isScanning
+                      ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                      : "bg-yellow-500 hover:bg-yellow-400 text-black"
+                  }`}
+                >
+                  {isUploading ? (
+                    "Loading..."
+                  ) : isScanning ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                      SCANNING...
+                    </>
+                  ) : (
+                    "Minting"
+                  )}
+                </button>
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-500">{error}</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
