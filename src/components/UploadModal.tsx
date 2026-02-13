@@ -88,6 +88,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<string>("");
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -193,6 +194,48 @@ const UploadModal: React.FC<UploadModalProps> = ({
       }, "image/jpeg");
     });
   };
+
+  // Auto-poll payment status
+  useEffect(() => {
+    if (!paymentData) return;
+
+    // Countdown Timer
+    const target = new Date(paymentData.expired_at).getTime();
+    const timerInterval = setInterval(() => {
+      const now = Date.now();
+      const diff = target - now;
+      if (diff <= 0) {
+        setTimeLeft("Expired");
+        return;
+      }
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${m}:${s.toString().padStart(2, "0")}`);
+    }, 1000);
+
+    const interval = setInterval(async () => {
+      console.log("Auto-polling status for:", paymentData.order_id);
+      try {
+        const res = await fetch(
+          `/api/memes/check-status?order_id=${paymentData.order_id}`,
+        );
+        const data = await res.json();
+        console.log("Poll result:", data);
+
+        if (data.payment_status === "PAID") {
+          console.log("Payment confirmed! Reloading...");
+          window.location.reload();
+        }
+      } catch (e) {
+        console.error("Poll error:", e);
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(timerInterval);
+    };
+  }, [paymentData]);
 
   const handleSubmit = async () => {
     if (!completedCrop || !imgRef.current) return;
@@ -312,7 +355,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
   };
 
   const rawTotalCost = calculateRawCost();
-  const totalCost = Math.max(500, Math.ceil(rawTotalCost));
+  // Only apply min if imageSrc exists
+  const totalCost = !imgSrc ? 0 : Math.max(500, Math.ceil(rawTotalCost));
 
   if (!isOpen) return null;
 
@@ -379,8 +423,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
                 </span>
               </div>
               <div className="text-[10px] text-zinc-600 font-mono flex justify-between">
-                <span>
-                  Exp: {new Date(paymentData.expired_at).toLocaleTimeString()}
+                <span className="text-red-500 font-bold font-mono">
+                  Exp: {timeLeft}
                 </span>
                 <span className="uppercase text-orange-500 font-bold animate-pulse">
                   Menunggu Pembayaran...
@@ -557,7 +601,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
             <div className="p-4 bg-zinc-900 border-t border-zinc-800 space-y-4">
               {/* Pricing Breakdown */}
               <div className="text-[10px] text-zinc-500 flex justify-between items-center px-1 font-mono">
-                <span>Dasar: Rp {PRICE_PER_PIXEL}/px</span>
+                <span>Harga: Rp {PRICE_PER_PIXEL}/px</span>
                 {overlapArea > 0 && (
                   <span className="text-orange-500">
                     Timpa: +Rp {OVERRIDE_PRICE_PER_PIXEL}/px
