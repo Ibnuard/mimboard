@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import UploadModal from "@/components/UploadModal";
 import Onboarding from "@/components/Onboarding";
+import Leaderboard from "@/components/Leaderboard";
 import { supabase } from "@/lib/supabase";
 
 // Dynamically import MemeCanvas with no SSR
@@ -126,6 +127,7 @@ export default function Home() {
         initialPosition={selectedCoords || undefined}
         existingMemes={memes}
       />
+      <Leaderboard />
       <Onboarding />
     </main>
   );

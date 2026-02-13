@@ -32,6 +32,7 @@ export async function POST(request: Request) {
     const width = Number(formData.get("width"));
     const height = Number(formData.get("height"));
     const title = (formData.get("title") as string) || "Untitled";
+    const user_name = (formData.get("user_name") as string) || "Anonymous";
 
     if (!file || isNaN(x) || isNaN(y) || isNaN(width) || isNaN(height)) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
@@ -161,6 +162,7 @@ export async function POST(request: Request) {
         width: clampedWidth,
         height: clampedHeight,
         title,
+        user_name,
         order_id: orderId,
         price: finalAmount,
         payment_status: "PENDING", // Wait for webhook

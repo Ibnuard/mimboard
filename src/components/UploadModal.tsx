@@ -89,6 +89,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
+  const [userName, setUserName] = useState("");
   const [timeLeft, setTimeLeft] = useState<string>("");
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -267,7 +268,9 @@ const UploadModal: React.FC<UploadModalProps> = ({
       formData.append("y", Math.round(position.y).toString());
       formData.append("width", clampedW.toString());
       formData.append("height", clampedH.toString());
+      formData.append("height", clampedH.toString());
       formData.append("title", title);
+      formData.append("user_name", userName || "Anonymous");
 
       const response = await fetch("/api/memes", {
         method: "POST",
@@ -623,6 +626,20 @@ const UploadModal: React.FC<UploadModalProps> = ({
                 )}
               </div>
 
+              {/* Name Input */}
+              <div className="space-y-1">
+                <span className="text-xs text-zinc-500 font-bold uppercase">
+                  Nama Kamu (Opsional)
+                </span>
+                <input
+                  type="text"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  placeholder="Anonymous"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-500 transition"
+                />
+              </div>
+
               {/* Action Bar */}
               <div className="flex items-center gap-3">
                 <div
@@ -667,6 +684,14 @@ const UploadModal: React.FC<UploadModalProps> = ({
                   )}
                 </button>
               </div>
+
+              <p className="text-[10px] text-zinc-500 text-center px-4 leading-tight italic">
+                <span className="text-zinc-400 font-bold not-italic">
+                  Developer Note:
+                </span>{" "}
+                Jika board ini penuh (100%), 50% dari total penjualan akan
+                didonasikan. 🙏
+              </p>
 
               {error && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2">
