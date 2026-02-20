@@ -23,7 +23,7 @@ export const OVERRIDE_PRICE_PER_PIXEL = 2; // Rp per pixel (overlap surcharge)
 export const ACCEPTED_IMAGE_TYPES =
   "image/png, image/jpeg, image/gif, image/webp";
 export const ACCEPTED_IMAGE_LABEL = "JPG, PNG, GIF, WebP";
-export const SCALE_OPTIONS = [0.25, 0.5, 1, 2, 4];
+export const SCALE_OPTIONS = [0.25, 0.5, 0.75, 1, 1.5, 2, 4];
 
 // ======================
 // Onboarding
