@@ -8,9 +8,20 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const PAKASIR_PROJECT_ID = process.env.PAKASIR_PROJECT_ID;
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
 export async function POST(request: Request) {
   try {
+    // 0. Verify Webhook Secret
+    const incomingSecret = request.headers.get("x-webhook-secret");
+    if (WEBHOOK_SECRET && incomingSecret !== WEBHOOK_SECRET) {
+      console.warn("Webhook rejected: invalid secret");
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
     const body = await request.json();
     console.log("Pakasir Webhook:", body);
 

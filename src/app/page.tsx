@@ -30,7 +30,10 @@ export default function Home() {
   const [percentRemaining, setPercentRemaining] = useState(100);
 
   const fetchMemes = async () => {
-    const { data, error } = await supabase.from("memes").select("*");
+    const { data, error } = await supabase
+      .from("memes")
+      .select("*")
+      .eq("payment_status", "PAID");
     if (data) setMemes(data);
     if (error) console.error("Error fetching memes:", error);
   };

@@ -15,16 +15,12 @@ CREATE TABLE public.memes (
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.memes ENABLE ROW LEVEL SECURITY;
 
--- Allow public read access
-CREATE POLICY "Public memes are viewable by everyone" 
+-- Allow public read access (PAID memes only)
+CREATE POLICY "Only paid memes are publicly viewable" 
 ON public.memes FOR SELECT 
-USING (true);
+USING (payment_status = 'PAID');
 
--- Allow public insert access (for anonymous uploads)
-CREATE POLICY "Public memes can be uploaded by everyone" 
-ON public.memes FOR INSERT 
-WITH CHECK (true);
-
--- Allow authenticated insert (assuming we might add auth later, or just use anon key for now with a service role if strictly backend, but for client-side insert with payment verification we might need a function or edge function. For now, let's allow public insert but we control it via API route).
--- Actually, for security, we should probably only allow insert via a secure API route (Service Role) after successful payment.
--- So we won't add a public insert policy. Only the service_role key can insert.
+-- INSERT / UPDATE / DELETE: No public policies.
+-- Only the service_role key (used in API routes) can modify data.
+-- This ensures all writes go through our secure API routes
+-- which handle payment verification via Pakasir.
