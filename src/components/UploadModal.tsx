@@ -90,6 +90,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
   const [userName, setUserName] = useState("");
+  const [message, setMessage] = useState("");
   const [timeLeft, setTimeLeft] = useState<string>("");
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +107,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
       setCrop(undefined);
       setCompletedCrop(undefined);
       setScale(1);
+      setMessage("");
     }
   }, [isOpen, initialPosition]);
 
@@ -271,6 +273,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
       formData.append("height", clampedH.toString());
       formData.append("title", title);
       formData.append("user_name", userName || "Anonymous");
+      formData.append("message", message.trim().slice(0, 32));
 
       const response = await fetch("/api/memes", {
         method: "POST",
@@ -492,7 +495,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
         ) : (
           <>
             {/* Content Area */}
-            <div className="flex-1 bg-black relative overflow-hidden flex items-center justify-center min-h-[300px]">
+            <div className="flex-1 bg-black relative overflow-hidden flex items-center justify-center min-h-[180px]">
               {isScanning && (
                 <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50 animate-in fade-in duration-200">
                   <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-yellow-500 mb-3"></div>
@@ -506,7 +509,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                 <div className="p-4 w-full h-full flex items-center justify-center">
                   {imageFile?.type === "image/gif" ? (
                     // GIF Mode: Show original image without crop
-                    <div className="relative max-h-[50vh]">
+                    <div className="relative max-h-[32vh]">
                       <img
                         ref={imgRef}
                         alt="Preview"
@@ -528,7 +531,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                           });
                         }}
                         style={{
-                          maxHeight: "50vh",
+                          maxHeight: "32vh",
                           maxWidth: "100%",
                           objectFit: "contain",
                         }}
@@ -544,7 +547,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                       onChange={(_, percentCrop: Crop) => setCrop(percentCrop)}
                       onComplete={(c: PixelCrop) => setCompletedCrop(c)}
                       disabled={isUploading}
-                      className={`max-h-[50vh] ${isUploading ? "pointer-events-none opacity-50" : ""}`}
+                      className={`max-h-[32vh] ${isUploading ? "pointer-events-none opacity-50" : ""}`}
                     >
                       <img
                         ref={imgRef}
@@ -552,7 +555,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                         src={imgSrc}
                         onLoad={onImageLoad}
                         style={{
-                          maxHeight: "50vh",
+                          maxHeight: "32vh",
                           maxWidth: "100%",
                           objectFit: "contain",
                         }}
@@ -615,9 +618,9 @@ const UploadModal: React.FC<UploadModalProps> = ({
             )}
 
             {/* Footer Controls */}
-            <div className="p-4 bg-zinc-900 border-t border-zinc-800 space-y-4">
+            <div className="p-3 bg-zinc-900 border-t border-zinc-800 space-y-2.5">
               {/* Pricing Breakdown */}
-              <div className="text-[10px] text-zinc-500 flex justify-between items-center px-1 font-mono">
+              <div className="text-[10px] text-zinc-500 flex justify-between items-center px-0.5 font-mono">
                 <span>Harga: Rp {PRICE_PER_PIXEL}/px</span>
                 {overlapArea > 0 && (
                   <span className="text-orange-500">
@@ -626,18 +629,47 @@ const UploadModal: React.FC<UploadModalProps> = ({
                 )}
               </div>
 
-              {/* Name Input */}
-              <div className="space-y-1">
-                <span className="text-xs text-zinc-500 font-bold uppercase">
-                  Nama Kamu (Opsional)
-                </span>
-                <input
-                  type="text"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  placeholder="Anonymous"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-500 transition"
-                />
+              {/* Name + Message — side by side */}
+              <div className="flex gap-2">
+                {/* Name Input */}
+                <div className="flex-1 space-y-0.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wide">
+                      Nama
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={userName}
+                    onChange={(e) => setUserName(e.target.value)}
+                    placeholder="Anonymous"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-yellow-500 transition"
+                  />
+                </div>
+
+                {/* Message Input */}
+                <div className="flex-[1.6] space-y-0.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wide">
+                      Pesan Hover
+                    </span>
+                    <span
+                      className={`text-[9px] font-mono ${
+                        message.length >= 32 ? "text-red-500" : "text-zinc-600"
+                      }`}
+                    >
+                      {message.length}/32
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value.slice(0, 32))}
+                    placeholder="Pesan saat hover..."
+                    maxLength={32}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-yellow-500 transition"
+                  />
+                </div>
               </div>
 
               {/* Action Bar */}

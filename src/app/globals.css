@@ -24,3 +24,31 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes rainbow-text {
+  0% {
+    color: #ff4e4e;
+  }
+  16% {
+    color: #ff9f1c;
+  }
+  33% {
+    color: #f9f54b;
+  }
+  50% {
+    color: #4eff91;
+  }
+  66% {
+    color: #4ec9ff;
+  }
+  83% {
+    color: #c94eff;
+  }
+  100% {
+    color: #ff4e4e;
+  }
+}
+
+.animate-rainbow {
+  animation: rainbow-text 2s linear infinite;
+}

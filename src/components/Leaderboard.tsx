@@ -61,18 +61,27 @@ export default function Leaderboard() {
             transitionDelay: `${i * 100}ms`,
           }}
         >
-          <div className="flex flex-col items-end">
-            <span className="font-bold text-xs text-zinc-900 drop-shadow-sm leading-none max-w-[120px] truncate text-right">
+          <div className="flex gap-1 flex-col items-end">
+            <span
+              className={`font-bold text-sm drop-shadow-sm leading-none max-w-[120px] truncate text-right ${
+                i === 0 ? "animate-rainbow" : "text-zinc-900"
+              }`}
+            >
+              {i === 0 ? "👑 " : ""}
               {l.name}
             </span>
-            <span className="text-[9px] font-mono text-zinc-500 leading-none mt-0.5">
+            <span
+              className={`text-xs font-mono leading-none mt-0.5 ${
+                i === 0 ? "animate-rainbow" : "text-zinc-500"
+              }`}
+            >
               {l.score.toLocaleString("id-ID")} px²
             </span>
           </div>
           <span
             className={`font-black text-sm italic w-5 text-right ${
               i === 0
-                ? "text-yellow-600 text-lg" // Darker yellow
+                ? "animate-rainbow text-lg"
                 : i === 1
                   ? "text-zinc-400"
                   : i === 2

@@ -18,6 +18,61 @@ interface MemeCanvasProps {
   selectedCoords: { x: number; y: number } | null;
 }
 
+// ---- HoverTooltip: fixed-position tooltip, rendered outside transformed container ----
+interface HoverTooltipProps {
+  meme: any;
+  screenX: number;
+  screenY: number;
+}
+
+const HoverTooltip: React.FC<HoverTooltipProps> = ({
+  meme,
+  screenX,
+  screenY,
+}) => (
+  <div
+    style={{
+      position: "fixed",
+      left: screenX,
+      top: screenY - 16,
+      transform: "translate(-50%, -100%)",
+      pointerEvents: "none",
+      zIndex: 9999,
+      whiteSpace: "nowrap",
+    }}
+  >
+    <div
+      style={{
+        background: "rgba(0,0,0,0.88)",
+        color: "#fbbf24",
+        fontFamily: "monospace",
+        fontSize: "12px",
+        fontWeight: "bold",
+        padding: "5px 10px",
+        borderRadius: "8px",
+        backdropFilter: "blur(6px)",
+        border: "1px solid rgba(251,191,36,0.35)",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+        letterSpacing: "0.02em",
+      }}
+    >
+      {meme.message}
+    </div>
+    {/* Arrow */}
+    <div
+      style={{
+        width: 0,
+        height: 0,
+        borderLeft: "6px solid transparent",
+        borderRight: "6px solid transparent",
+        borderTop: "6px solid rgba(0,0,0,0.88)",
+        margin: "0 auto",
+      }}
+    />
+  </div>
+);
+
+// ---- MemeCanvas ----
 const MemeCanvas: React.FC<MemeCanvasProps> = ({
   memes,
   onCanvasClick,
@@ -37,12 +92,53 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const memesContainerRef = useRef<HTMLDivElement>(null);
 
+  // Hover tooltip state (message memes only, no pointer-events needed)
+  const [hoveredMeme, setHoveredMeme] = useState<any | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  // Keep stageSpec in a ref so mousemove handler always has fresh values
+  const stageSpecRef = useRef(stageSpec);
+
   // Sync the HTML overlay container with Stage transform
   const syncOverlayTransform = (x: number, y: number, scale: number) => {
     if (memesContainerRef.current) {
       memesContainerRef.current.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
     }
   };
+
+  // Keep stageSpecRef in sync
+  useEffect(() => {
+    stageSpecRef.current = stageSpec;
+  }, [stageSpec]);
+
+  // Mousemove handler: convert screen coords → board coords, find hovered meme
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { x: stX, y: stY, scale } = stageSpecRef.current;
+    if (scale === 0) return;
+    // Board coordinates of the cursor
+    const boardX = (e.clientX - stX) / scale;
+    const boardY = (e.clientY - stY) / scale;
+
+    // Find topmost meme with a message that contains this point
+    // Iterate in reverse so the visually topmost (last rendered) wins
+    const memesWithMsg = memes.filter((m) => !!m.message);
+    let found: any = null;
+    for (let i = memesWithMsg.length - 1; i >= 0; i--) {
+      const m = memesWithMsg[i];
+      if (
+        boardX >= m.x &&
+        boardX <= m.x + m.width &&
+        boardY >= m.y &&
+        boardY <= m.y + m.height
+      ) {
+        found = m;
+        break;
+      }
+    }
+    setHoveredMeme(found);
+    if (found) setTooltipPos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseLeave = () => setHoveredMeme(null);
 
   // Calculate the "fit-to-screen" scale
   const calcFitScale = (w: number, h: number) => {
@@ -197,6 +293,8 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
     <div
       ref={containerRef}
       className="w-full h-screen bg-gray-50 overflow-hidden relative"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Watermark - dynamic positioning */}
       <div
@@ -312,7 +410,7 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
           height: GRID_SIZE,
         }}
       >
-        {/* All Memes (HTML) */}
+        {/* All Memes (HTML) — pointer-events:none so drag is never blocked */}
         {memes.map((meme) => (
           <img
             key={meme.id}
@@ -327,7 +425,6 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
               height: meme.height,
               objectFit: "fill",
               opacity: isReady ? 1 : 0,
-              // Performance optimizations
               backfaceVisibility: "hidden",
               transform: "translateZ(0)",
             }}
@@ -354,6 +451,15 @@ const MemeCanvas: React.FC<MemeCanvasProps> = ({
           />
         )}
       </div>
+
+      {/* Hover Tooltip — hidden while dragging for smooth performance */}
+      {hoveredMeme && !isDragging && (
+        <HoverTooltip
+          meme={hoveredMeme}
+          screenX={tooltipPos.x}
+          screenY={tooltipPos.y}
+        />
+      )}
     </div>
   );
 };

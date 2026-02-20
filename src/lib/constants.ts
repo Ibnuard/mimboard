@@ -14,8 +14,8 @@ export const DRAG_VISIBLE_RATIO = 0.3; // Minimum visible board ratio when dragg
 // ======================
 // Pricing
 // ======================
-export const PRICE_PER_PIXEL = 0.25; // Rp per pixel (base)
-export const OVERRIDE_PRICE_PER_PIXEL = 0.5; // Rp per pixel (overlap surcharge)
+export const PRICE_PER_PIXEL = 1; // Rp per pixel (base)
+export const OVERRIDE_PRICE_PER_PIXEL = 2; // Rp per pixel (overlap surcharge)
 
 // ======================
 // Upload
